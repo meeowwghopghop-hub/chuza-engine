@@ -1,92 +1,211 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Chuza090 Virtual Arena</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { background: #0e1621; color: white; font-family: sans-serif; margin: 0; text-align: center; overflow: hidden; }
-        .video-container { width: 100%; position: relative; background: #000; aspect-ratio: 16/9; }
-        #match-video { width: 100%; height: 100%; display: block; }
-        #scoreboard-overlay { 
-            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85); flex-direction: column; justify-content: center; align-items: center;
+        body {
+            background-color: #0d0d0d;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
         }
-        .bet-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 15px; }
-        .btn { background: #2481cc; border: none; color: white; padding: 12px 5px; border-radius: 6px; font-weight: bold; font-size: 14px; }
-        .btn:active { background: #1c66a3; transform: scale(0.95); }
-        .status-bar { padding: 10px; background: #17212b; font-size: 14px; border-bottom: 1px solid #232e3c; }
+
+        /* Video Section */
+        #video-container {
+            width: 100%;
+            background: #000;
+            border-bottom: 2px solid #333;
+            line-height: 0;
+        }
+
+        video {
+            width: 100%;
+            height: auto;
+        }
+
+        /* Scoreboard */
+        .scoreboard {
+            background: linear-gradient(180deg, #1a1a1a 0%, #000 100%);
+            padding: 15px;
+            text-align: center;
+            border-bottom: 1px solid #444;
+        }
+
+        #teams-display {
+            font-size: 1.2rem;
+            color: #ff9800;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        #live-score {
+            font-size: 1.8rem;
+            margin: 5px 0;
+            font-weight: 900;
+        }
+
+        /* Betting Info */
+        .betting-info {
+            background: #222;
+            padding: 10px;
+            color: #00ff00;
+            font-weight: bold;
+            font-size: 1rem;
+            border-radius: 5px;
+            margin: 10px;
+        }
+
+        /* Winner Market Area */
+        .winner-market {
+            display: flex;
+            justify-content: space-around;
+            padding: 10px;
+        }
+
+        .btn-winner {
+            background: #e65100;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            width: 45%;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        /* Betting Grid */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            padding: 15px;
+            margin-bottom: 50px;
+        }
+
+        .bet-btn {
+            padding: 20px 10px;
+            border-radius: 10px;
+            border: none;
+            font-weight: bold;
+            font-size: 1rem;
+            color: white;
+            text-transform: uppercase;
+        }
+
+        .dot { background: #555; }
+        .one { background: #2e7d32; }
+        .two { background: #1565c0; }
+        .four { background: #fbc02d; color: black; }
+        .six { background: #d32f2f; }
+        .wicket { background: #000; border: 1px solid #fff; }
+
+        .disabled { opacity: 0.5; pointer-events: none; }
     </style>
 </head>
 <body>
-    <div class="status-bar">
-        Next Ball: <span id="next-ball-id">#--</span> | Balance: ₹<span id="user-bal">0</span>
+
+    <div id="video-container">
+        <video id="cricket-video" autoplay muted playsinline>
+            <source id="video-source" src="https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/W-BOWLED.mp4" type="video/mp4">
+        </video>
     </div>
 
-    <div class="video-container">
-        <video id="match-video" muted playsinline></video>
-        <div id="scoreboard-overlay">
-            <h2 id="last-ball-res" style="margin:0; color:#ffc107;">--</h2>
-            <p style="margin:5px 0 0 0; font-size:12px;">PREPARING NEXT DELIVERY...</p>
-        </div>
+    <div class="scoreboard">
+        <div id="teams-display">BADMOSH vs SUTTEBAZ</div>
+        <div id="live-score">0/0 (0.0)</div>
     </div>
 
-    <div class="bet-grid">
-        <button class="btn" onclick="placeBet('runs_0')">DOT (0)</button>
-        <button class="btn" onclick="placeBet('runs_1')">1 RUN</button>
-        <button class="btn" onclick="placeBet('runs_2')">2 RUNS</button>
-        <button class="btn" onclick="placeBet('runs_4')" style="background:#28a745;">FOUR (4)</button>
-        <button class="btn" onclick="placeBet('runs_6')" style="background:#f39c12;">SIX (6)</button>
-        <button class="btn" onclick="placeBet('W-BOWLED')" style="background:#e74c3c;">WICKET</button>
+    <div class="betting-info">
+        🎯 PLACING BETS FOR BALL: <span id="target-ball">#--</span>
+    </div>
+
+    <div class="winner-market" id="winner-div">
+        <button class="btn-winner" onclick="placeBet('TEAM_A', true)" id="t1-label">TEAM A</button>
+        <button class="btn-winner" onclick="placeBet('TEAM_B', true)" id="t2-label">TEAM B</button>
+    </div>
+
+    <div class="grid-container">
+        <button class="bet-btn dot" onclick="placeBet('runs_0')">Dot</button>
+        <button class="bet-btn one" onclick="placeBet('runs_1')">1 Run</button>
+        <button class="bet-btn two" onclick="placeBet('runs_2')">2 Runs</button>
+        <button class="bet-btn four" onclick="placeBet('runs_4')">4 Runs</button>
+        <button class="bet-btn six" onclick="placeBet('runs_6')">6 Runs</button>
+        <button class="bet-btn wicket" onclick="placeBet('wicket')">Wicket</button>
     </div>
 
     <script>
-        const tg = window.Telegram.WebApp;
+        let tg = window.Telegram.WebApp;
         tg.expand();
 
-        // Yahan apne GitHub ke Raw Links daal
-        const videoSources = {
-    'runs_0': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_0.mp4',
-    'runs_1': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_1.mp4',
-    'runs_2': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_2.mp4',
-    'runs_4': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_4.mp4',
-    'runs_6': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_6.mp4',
-    'W-BOWLED': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/W-BOWLED.mp4'
-};
-        const CYCLE_TIME = 25000; // 25 Sec
-        const ACTION_TIME = 22000; // 22 Sec
+        const videoLinks = {
+            'runs_0': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_0.mp4',
+            'runs_1': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_1.mp4',
+            'runs_2': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_2.mp4',
+            'runs_4': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_4.mp4',
+            'runs_6': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_6.mp4',
+            'wicket': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/W-BOWLED.mp4'
+        };
 
-        function engine() {
-            const now = Date.now();
-            const elapsed = now % CYCLE_TIME;
-            const video = document.getElementById('match-video');
-            const overlay = document.getElementById('scoreboard-overlay');
+        async function refreshStatus() {
+            try {
+                let response = await fetch('/get_status');
+                let data = await response.json();
 
-            if (elapsed < ACTION_TIME) {
-                if (video.style.display === 'none') {
-                    overlay.style.display = 'none';
-                    video.style.display = 'block';
-                    // Randomly playing for visual demo, actual logic synced by server time
-                    video.play();
+                // Update UI
+                document.getElementById('teams-display').innerText = `${data.t1} vs ${data.t2}`;
+                document.getElementById('t1-label').innerText = data.t1;
+                document.getElementById('t2-label').innerText = data.t2;
+                
+                // Score Logic (Inning 1 or 2)
+                if(data.ball <= 12) {
+                    document.getElementById('live-score').innerText = `${data.s1}/${data.w1} (${Math.floor((data.ball-1)/6)}.${(data.ball-1)%6})`;
+                } else {
+                    document.getElementById('live-score').innerText = `${data.s2}/${data.w2} vs ${data.s1}`;
                 }
-            } else {
-                video.style.display = 'none';
-                overlay.style.display = 'flex';
-                document.getElementById('last-ball-res').innerText = "WAITING...";
+
+                // Ball + 3 Info
+                document.getElementById('target-ball').innerText = "#" + (data.ball + 3);
+
+                // Hide winner market after 1st inning
+                if(data.ball > 12) {
+                    document.getElementById('winner-div').classList.add('disabled');
+                } else {
+                    document.getElementById('winner-div').classList.remove('disabled');
+                }
+
+            } catch (e) {
+                console.error("Status fetch failed", e);
             }
         }
 
-        setInterval(engine, 1000);
-
-        function placeBet(type) {
-            tg.sendData(JSON.stringify({
-                "action": "place_virtual_bet",
-                "type": type,
-                "amount": 25
-            }));
-            tg.close(); // Bet lagte hi window band
+        function placeBet(type, isWinner = false) {
+            let userId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 12345;
+            
+            fetch('/place_bet', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: userId,
+                    amount: 50, // Minimum Bet
+                    type: type,
+                    is_winner_bet: isWinner
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                alert(data.msg);
+            });
         }
+
+        // Update every 5 seconds to keep sync
+        setInterval(refreshStatus, 5000);
+        refreshStatus();
+
     </script>
 </body>
 </html>
