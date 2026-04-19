@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Chuza090 Virtual Arena</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { background: #0e1621; color: white; font-family: sans-serif; margin: 0; text-align: center; overflow: hidden; }
+        .video-container { width: 100%; position: relative; background: #000; aspect-ratio: 16/9; }
+        #match-video { width: 100%; height: 100%; display: block; }
+        #scoreboard-overlay { 
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); flex-direction: column; justify-content: center; align-items: center;
+        }
+        .bet-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 15px; }
+        .btn { background: #2481cc; border: none; color: white; padding: 12px 5px; border-radius: 6px; font-weight: bold; font-size: 14px; }
+        .btn:active { background: #1c66a3; transform: scale(0.95); }
+        .status-bar { padding: 10px; background: #17212b; font-size: 14px; border-bottom: 1px solid #232e3c; }
+    </style>
+</head>
+<body>
+    <div class="status-bar">
+        Next Ball: <span id="next-ball-id">#--</span> | Balance: ₹<span id="user-bal">0</span>
+    </div>
+
+    <div class="video-container">
+        <video id="match-video" muted playsinline></video>
+        <div id="scoreboard-overlay">
+            <h2 id="last-ball-res" style="margin:0; color:#ffc107;">--</h2>
+            <p style="margin:5px 0 0 0; font-size:12px;">PREPARING NEXT DELIVERY...</p>
+        </div>
+    </div>
+
+    <div class="bet-grid">
+        <button class="btn" onclick="placeBet('runs_0')">DOT (0)</button>
+        <button class="btn" onclick="placeBet('runs_1')">1 RUN</button>
+        <button class="btn" onclick="placeBet('runs_2')">2 RUNS</button>
+        <button class="btn" onclick="placeBet('runs_4')" style="background:#28a745;">FOUR (4)</button>
+        <button class="btn" onclick="placeBet('runs_6')" style="background:#f39c12;">SIX (6)</button>
+        <button class="btn" onclick="placeBet('W-BOWLED')" style="background:#e74c3c;">WICKET</button>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        // Yahan apne GitHub ke Raw Links daal
+        const videoSources = {
+    'runs_0': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_0.mp4',
+    'runs_1': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_1.mp4',
+    'runs_2': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_2.mp4',
+    'runs_4': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_4.mp4',
+    'runs_6': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_6.mp4',
+    'W-BOWLED': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/W-BOWLED.mp4'
+};
+        const CYCLE_TIME = 25000; // 25 Sec
+        const ACTION_TIME = 22000; // 22 Sec
+
+        function engine() {
+            const now = Date.now();
+            const elapsed = now % CYCLE_TIME;
+            const video = document.getElementById('match-video');
+            const overlay = document.getElementById('scoreboard-overlay');
+
+            if (elapsed < ACTION_TIME) {
+                if (video.style.display === 'none') {
+                    overlay.style.display = 'none';
+                    video.style.display = 'block';
+                    // Randomly playing for visual demo, actual logic synced by server time
+                    video.play();
+                }
+            } else {
+                video.style.display = 'none';
+                overlay.style.display = 'flex';
+                document.getElementById('last-ball-res').innerText = "WAITING...";
+            }
+        }
+
+        setInterval(engine, 1000);
+
+        function placeBet(type) {
+            tg.sendData(JSON.stringify({
+                "action": "place_virtual_bet",
+                "type": type,
+                "amount": 25
+            }));
+            tg.close(); // Bet lagte hi window band
+        }
+    </script>
+</body>
+</html>
