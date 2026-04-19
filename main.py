@@ -1,147 +1,91 @@
-import sqlite3
-import os
-import pytz
-import time
 import random
-import json
-from datetime import datetime
-from threading import Thread
-from flask import Flask, render_template
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+import time
+import threading
+from flask import Flask, render_template, request, jsonify
+from telebot import TeleBot, types
+import database
 
-# --- CONFIGURATION ---
-IST = pytz.timezone('Asia/Kolkata')
-BOT_TOKEN = "8735091687:AAHn5Grvzg0Lf2R799xwPtRRnzgA8O8WE4w"
-ADMIN_IDS = [7978295530, 6987036375]
-CHANNEL_ID = -1003869160392
-MIN_DEPOSIT = 100
-MIN_VIRTUAL_BET = 25
-
-# --- FLASK SERVER ---
 app = Flask(__name__)
+bot = TeleBot("8735091687:AAHn5Grvzg0Lf2R799xwPtRRnzgA8O8WE4w") 
+ADMIN_ID = 7978295530 # <--- Apni ID
+CHANNEL_ID = -1003869160392 # <--- Apni Channel ID yahan daal (Without quotes agar number hai)
 
+# --- VIRTUAL ARENA DATA ---
+v_match = {"t1": "", "t2": "", "s1": 0, "w1": 0, "s2": 0, "w2": 0, "ball": 0, "live": False, "start": 0}
+
+def start_virtual_cycle():
+    global v_match
+    teams = ["Badmosh Bastards", "Suttebaz Sikandar", "Charsi Challengers", "Ganjedi Gladiators", "Lukkha Lions", "Velle Vikings", "Tharki Tigers", "Bewda Blasters", "Nasheri Nawabs", "Chapri Champions"]
+    t1, t2 = random.sample(teams, 2)
+    v_match.update({"t1": t1, "t2": t2, "s1": 0, "w1": 0, "s2": 0, "w2": 0, "ball": 0, "live": True, "start": time.time()})
+
+# --- BOT COMMANDS ---
+
+@bot.message_handler(commands=['start'])
+def welcome(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("🏏 IPL 2026", "🏆 PSL 2026")
+    markup.add("🎮 VIRTUAL ARENA (24/7)", "💰 Wallet")
+    bot.send_message(message.chat.id, "🔥 CHUZA090 Betting Bot is Active!", reply_markup=markup)
+
+# Admin command to add balance: /add [user_id] [amount]
+@bot.message_handler(commands=['add'])
+def add_balance(message):
+    if message.from_user.id == ADMIN_ID:
+        try:
+            parts = message.text.split()
+            uid, amt = int(parts[1]), float(parts[2])
+            database.update_balance(uid, amt)
+            bot.send_message(uid, f"💰 ₹{amt} added to your wallet! Good luck.")
+            bot.reply_to(message, "Done! Balance updated.")
+        except:
+            bot.reply_to(message, "Usage: /add 12345678 500")
+
+# Channel Posting
+@bot.message_handler(commands=['post'])
+def post_channel(message):
+    if message.from_user.id == ADMIN_ID:
+        text = message.text.replace('/post ', '')
+        bot.send_message(CHANNEL_ID, f"📢 **NEW UPDATE:**\n\n{text}")
+        bot.reply_to(message, "Channel par post ho gaya! ✅")
+
+@bot.message_handler(content_types=['photo'])
+def handle_ss(message):
+    bot.forward_message(ADMIN_ID, message.chat.id, message.message_id)
+    bot.reply_to(message, "Screenshot forwarded. Admin is verifying... ⏳")
+
+@bot.message_handler(func=lambda m: m.text == "🎮 VIRTUAL ARENA (24/7)")
+def arena(message):
+    web_app = types.WebAppInfo("https://your-app-name.onrender.com") # <--- APNA URL
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🏟️ PLAY NOW", web_app=web_app))
+    bot.send_message(message.chat.id, f"🎮 Virtual Match: {v_match['t1']} vs {v_match['t2']}", reply_markup=markup)
+
+# --- FLASK ---
 @app.route('/')
-def home(): return "Chuza090 Multi-League Bot is Live!"
+def home(): return render_template('index.html')
 
-@app.route('/virtual')
-def virtual_arena():
-    return render_template('index.html') # Ye wahi HTML file hai jo maine di thi
+@app.route('/get_status')
+def status():
+    global v_match
+    elapsed = int(time.time() - v_match['start'])
+    v_match['ball'] = (elapsed // 25) + 1
+    if v_match['ball'] > 24: start_virtual_cycle()
+    return jsonify(v_match)
 
-# --- DATABASE LOGIC ---
-def init_db():
-    conn = sqlite3.connect('ipl_wallet.db')
-    cursor = conn.cursor()
-    cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, name TEXT, balance INTEGER DEFAULT 0)')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS virtual_bets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        user_id INTEGER, 
-        bet_amount INTEGER, 
-        prediction TEXT, 
-        target_ball_idx INTEGER, 
-        status TEXT DEFAULT 'pending'
-    )''')
-    conn.commit()
-    conn.close()
+@app.route('/place_bet', methods=['POST'])
+def vbet():
+    data = request.json
+    uid, amt = data['user_id'], data['amount']
+    target = v_match['ball'] + 3
+    if target > 24: return jsonify({"status":"error", "msg":"Market Closed!"})
+    if database.get_balance(uid) < amt: return jsonify({"status":"error", "msg":"Low Balance"})
+    database.update_balance(uid, -amt)
+    return jsonify({"status":"success", "msg":f"Bet set for Ball #{target}"})
 
-def get_balance(user_id):
-    conn = sqlite3.connect('ipl_wallet.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-    res = cursor.fetchone()
-    conn.close()
-    return res[0] if res else 0
-
-def update_balance(user_id, amount):
-    conn = sqlite3.connect('ipl_wallet.db')
-    cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO users (user_id, name, balance) VALUES (?, 'User', 0)", (user_id,))
-    cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
-    conn.commit()
-    conn.close()
-
-# --- VIRTUAL SETTLEMENT ENGINE ---
-# Ye background mein chalta rahega
-current_match_ball = 0
-last_result = "STARTING"
-
-def auto_settle_engine():
-    global current_match_ball, last_result
-    results_pool = ['runs_0', 'runs_1', 'runs_2', 'runs_4', 'runs_6', 'W-BOWLED']
-    
-    while True:
-        time.sleep(25) # 25 second ka cycle
-        current_match_ball += 1
-        last_result = random.choice(results_pool)
-        
-        conn = sqlite3.connect('ipl_wallet.db')
-        cursor = conn.cursor()
-        
-        # Settle Bets
-        cursor.execute("SELECT id, user_id, bet_amount, prediction FROM virtual_bets WHERE target_ball_idx = ? AND status = 'pending'", (current_match_ball,))
-        bets = cursor.fetchall()
-        
-        for bid, uid, amt, pred in bets:
-            if pred == last_result:
-                # Odds Logic (4 pe 4x, 6 pe 6x, baaki pe 2x)
-                multiplier = 6 if '6' in pred else (4 if '4' in pred else 2)
-                win_amt = amt * multiplier
-                cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (win_amt, uid))
-                cursor.execute("UPDATE virtual_bets SET status = 'WON' WHERE id = ?", (bid,))
-            else:
-                cursor.execute("UPDATE virtual_bets SET status = 'LOST' WHERE id = ?", (bid,))
-        
-        conn.commit()
-        conn.close()
-
-# --- BOT HANDLERS ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    init_db()
-    # Yahan Render ka URL daalna hai deploy karne ke baad
-    web_url = "https://your-app-name.onrender.com/virtual" 
-    
-    keyboard = [
-        [InlineKeyboardButton("🎰 VIRTUAL ARENA (NEW)", web_app=WebAppInfo(url=web_url))],
-        [InlineKeyboardButton("💰 Deposit", callback_data='D'), InlineKeyboardButton("🏦 Withdraw", callback_data='W')],
-        [InlineKeyboardButton("💳 Balance", callback_data='AB'), InlineKeyboardButton("🎲 Bet Official", callback_data='BET_SECTION')]
-    ]
-    await update.message.reply_text(f"🏆 *Chuza090 MULTI-LEAGUE BOOK*\nMin Deposit: ₹{MIN_DEPOSIT}\nVirtual Min Bet: ₹{MIN_VIRTUAL_BET}", 
-                                   reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-
-# --- WEBAPP DATA RECEIVER ---
-async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    data = json.loads(update.effective_message.web_app_data.data)
-    user_id = update.effective_user.id
-    
-    if data.get("action") == "place_virtual_bet":
-        amt = data['amount']
-        pred = data['type']
-        bal = get_balance(user_id)
-        
-        if bal >= amt:
-            update_balance(user_id, -amt)
-            conn = sqlite3.connect('ipl_wallet.db')
-            cursor = conn.cursor()
-            # Bet hamesha next se next ball par lagegi (Safety)
-            target = current_match_ball + 2 
-            cursor.execute("INSERT INTO virtual_bets (user_id, bet_amount, prediction, target_ball_idx) VALUES (?,?,?,?)",
-                           (user_id, amt, pred, target))
-            conn.commit()
-            conn.close()
-            await update.effective_user.send_message(f"✅ Bet Placed: {pred} for Ball #{target}")
-
-# --- WEB SERVER THREAD ---
-def run_flask():
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+def run_f(): app.run(host='0.0.0.0', port=5000)
 
 if __name__ == '__main__':
-    init_db()
-    Thread(target=run_flask).start()
-    Thread(target=auto_settle_engine).start()
-    
-    bot_app = Application.builder().token(BOT_TOKEN).build()
-    bot_app.add_handler(CommandHandler("start", start))
-    bot_app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data))
-    # Yahan apne purane button_click aur handle_message handlers add kar lena
-    bot_app.run_polling()
+    start_virtual_cycle()
+    threading.Thread(target=run_f).start()
+    bot.infinity_polling()
