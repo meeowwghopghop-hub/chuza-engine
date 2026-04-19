@@ -1,211 +1,65 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chuza090 Virtual Arena</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body {
-            background-color: #0d0d0d;
-            color: white;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-            overflow-x: hidden;
-        }
-
-        /* Video Section */
-        #video-container {
-            width: 100%;
-            background: #000;
-            border-bottom: 2px solid #333;
-            line-height: 0;
-        }
-
-        video {
-            width: 100%;
-            height: auto;
-        }
-
-        /* Scoreboard */
-        .scoreboard {
-            background: linear-gradient(180deg, #1a1a1a 0%, #000 100%);
-            padding: 15px;
-            text-align: center;
-            border-bottom: 1px solid #444;
-        }
-
-        #teams-display {
-            font-size: 1.2rem;
-            color: #ff9800;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-
-        #live-score {
-            font-size: 1.8rem;
-            margin: 5px 0;
-            font-weight: 900;
-        }
-
-        /* Betting Info */
-        .betting-info {
-            background: #222;
-            padding: 10px;
-            color: #00ff00;
-            font-weight: bold;
-            font-size: 1rem;
-            border-radius: 5px;
-            margin: 10px;
-        }
-
-        /* Winner Market Area */
-        .winner-market {
-            display: flex;
-            justify-content: space-around;
-            padding: 10px;
-        }
-
-        .btn-winner {
-            background: #e65100;
-            color: white;
-            border: none;
-            padding: 12px;
-            border-radius: 8px;
-            width: 45%;
-            font-weight: bold;
-            font-size: 0.9rem;
-        }
-
-        /* Betting Grid */
-        .grid-container {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            padding: 15px;
-            margin-bottom: 50px;
-        }
-
-        .bet-btn {
-            padding: 20px 10px;
-            border-radius: 10px;
-            border: none;
-            font-weight: bold;
-            font-size: 1rem;
-            color: white;
-            text-transform: uppercase;
-        }
-
-        .dot { background: #555; }
-        .one { background: #2e7d32; }
-        .two { background: #1565c0; }
-        .four { background: #fbc02d; color: black; }
-        .six { background: #d32f2f; }
-        .wicket { background: #000; border: 1px solid #fff; }
-
-        .disabled { opacity: 0.5; pointer-events: none; }
+        body { background: #000; color: #fff; font-family: sans-serif; text-align: center; }
+        .balance-box { background: #222; padding: 10px; border-radius: 10px; margin: 10px; font-size: 20px; color: #0f0; }
+        .bet-btn { background: #f00; color: #fff; padding: 15px; border: none; border-radius: 5px; margin: 5px; width: 40%; font-weight: bold; }
+        #video-container { width: 100%; border: 2px solid #333; }
     </style>
 </head>
 <body>
+    <h2>🎮 CHUZA090 ARENA</h2>
+    
+    <div class="balance-box" id="user-balance">Balance: Loading...</div>
 
     <div id="video-container">
-        <video id="cricket-video" autoplay muted playsinline>
-            <source id="video-source" src="https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/W-BOWLED.mp4" type="video/mp4">
-        </video>
+        <p>🔴 Live Scoreboard Loading...</p>
     </div>
 
-    <div class="scoreboard">
-        <div id="teams-display">BADMOSH vs SUTTEBAZ</div>
-        <div id="live-score">0/0 (0.0)</div>
-    </div>
-
-    <div class="betting-info">
-        🎯 PLACING BETS FOR BALL: <span id="target-ball">#--</span>
-    </div>
-
-    <div class="winner-market" id="winner-div">
-        <button class="btn-winner" onclick="placeBet('TEAM_A', true)" id="t1-label">TEAM A</button>
-        <button class="btn-winner" onclick="placeBet('TEAM_B', true)" id="t2-label">TEAM B</button>
-    </div>
-
-    <div class="grid-container">
-        <button class="bet-btn dot" onclick="placeBet('runs_0')">Dot</button>
-        <button class="bet-btn one" onclick="placeBet('runs_1')">1 Run</button>
-        <button class="bet-btn two" onclick="placeBet('runs_2')">2 Runs</button>
-        <button class="bet-btn four" onclick="placeBet('runs_4')">4 Runs</button>
-        <button class="bet-btn six" onclick="placeBet('runs_6')">6 Runs</button>
-        <button class="bet-btn wicket" onclick="placeBet('wicket')">Wicket</button>
+    <div style="margin-top: 20px;">
+        <button class="bet-btn" onclick="placeBet(50)">BET ₹50</button>
+        <button class="bet-btn" onclick="placeBet(100)">BET ₹100</button>
     </div>
 
     <script>
-        let tg = window.Telegram.WebApp;
-        tg.expand();
+        const urlParams = new URLSearchParams(window.location.search);
+        const userId = urlParams.get('user_id');
 
-        const videoLinks = {
-            'runs_0': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_0.mp4',
-            'runs_1': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_1.mp4',
-            'runs_2': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_2.mp4',
-            'runs_4': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_4.mp4',
-            'runs_6': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/runs_6.mp4',
-            'wicket': 'https://github.com/meeowwghopghop-hub/virtuality-bot/raw/refs/heads/main/W-BOWLED.mp4'
-        };
-
-        async function refreshStatus() {
-            try {
-                let response = await fetch('/get_status');
-                let data = await response.json();
-
-                // Update UI
-                document.getElementById('teams-display').innerText = `${data.t1} vs ${data.t2}`;
-                document.getElementById('t1-label').innerText = data.t1;
-                document.getElementById('t2-label').innerText = data.t2;
-                
-                // Score Logic (Inning 1 or 2)
-                if(data.ball <= 12) {
-                    document.getElementById('live-score').innerText = `${data.s1}/${data.w1} (${Math.floor((data.ball-1)/6)}.${(data.ball-1)%6})`;
-                } else {
-                    document.getElementById('live-score').innerText = `${data.s2}/${data.w2} vs ${data.s1}`;
-                }
-
-                // Ball + 3 Info
-                document.getElementById('target-ball').innerText = "#" + (data.ball + 3);
-
-                // Hide winner market after 1st inning
-                if(data.ball > 12) {
-                    document.getElementById('winner-div').classList.add('disabled');
-                } else {
-                    document.getElementById('winner-div').classList.remove('disabled');
-                }
-
-            } catch (e) {
-                console.error("Status fetch failed", e);
-            }
+        // Function to fetch real-time balance
+        function updateUIBalance() {
+            fetch(`/get_user_data?user_id=${userId}`)
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('user-balance').innerText = "Balance: ₹" + data.balance;
+                });
         }
 
-        function placeBet(type, isWinner = false) {
-            let userId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 12345;
+        // Function to place bet and sync database
+        function placeBet(amount) {
+            if(!userId) return alert("User not identified!");
             
-            fetch('/place_bet', {
+            fetch('/place_virtual_bet', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    user_id: userId,
-                    amount: 50, // Minimum Bet
-                    type: type,
-                    is_winner_bet: isWinner
-                })
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ user_id: userId, amount: amount })
             })
             .then(res => res.json())
             .then(data => {
-                alert(data.msg);
+                if(data.status === 'success') {
+                    alert("Bet Successful! 👍");
+                    updateUIBalance(); // Immediate refresh
+                } else {
+                    alert("Error: " + data.message);
+                }
             });
         }
 
-        // Update every 5 seconds to keep sync
-        setInterval(refreshStatus, 5000);
-        refreshStatus();
-
+        // Initial Load
+        updateUIBalance();
     </script>
 </body>
 </html>
