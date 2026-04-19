@@ -1,10 +1,6 @@
 import os
 import sqlite3
-import random
-import time
 import threading
-import pytz
-from datetime import datetime
 from flask import Flask, render_template, request, jsonify
 import telebot
 from telebot import types
@@ -12,8 +8,6 @@ from telebot import types
 # --- CONFIG ---
 TOKEN = "8735091687:AAErETdqEJidXCpeqFLZ51DVqVZxb0fDbRg"
 ADMIN_ID = 7978295530
-CHANNEL_ID = -1003869160392
-IST = pytz.timezone('Asia/Kolkata')
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
@@ -25,114 +19,77 @@ def init_db():
     conn.commit()
     conn.close()
 
-def get_balance(user_id):
+def update_balance(user_id, amount):
     conn = sqlite3.connect('ipl_wallet.db', check_same_thread=False)
     cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-    res = cursor.fetchone()
-    conn.close()
-    return res[0] if res else 0
-
-def update_balance(user_id, name, amount):
-    conn = sqlite3.connect('ipl_wallet.db', check_same_thread=False)
-    cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO users (user_id, name, balance) VALUES (?, ?, 0)", (user_id, name))
+    cursor.execute("INSERT OR IGNORE INTO users (user_id, balance) VALUES (?, 0)", (user_id,))
     cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
     conn.commit()
     conn.close()
 
-# --- VIRTUAL MATCH TIMING ---
-def get_v_info():
-    now = datetime.now(IST)
-    slots = [1, 4, 7, 10, 13, 16, 19, 22] 
-    next_h = next((s for s in slots if s > now.hour or (s == now.hour and now.minute < 15)), slots[0])
-    teams = ["Badmosh Bastards", "Suttebaz Sikandar", "Charsi Challengers", "Ganjedi Gladiators", "Lukkha Lions"]
-    t1, t2 = random.sample(teams, 2)
-    return {"t1": t1, "t2": t2, "time": f"{next_h}:15"}
+# --- BOT LOGIC ---
 
-# --- BOT HANDLERS ---
 @bot.message_handler(commands=['start'])
 def start(message):
     init_db()
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(types.InlineKeyboardButton("💰 Deposit", callback_data='D'),
-               types.InlineKeyboardButton("🏦 Withdraw", callback_data='W'),
-               types.InlineKeyboardButton("💳 Balance", callback_data='AB'),
-               types.InlineKeyboardButton("🎲 Bet Section", callback_data='BET_SECTION'))
-    bot.send_message(message.chat.id, "🏆 *Chuza090 MULTI-LEAGUE BOOK*\nBhai, niche buttons use kar.", reply_markup=markup, parse_mode='Markdown')
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("💰 Deposit", callback_data='D'))
+    bot.send_message(message.chat.id, "🏆 **Chuza090 Bot**\nNiche deposit par click karo.", reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda call: True)
-def callback_query(call):
-    uid = call.from_user.id
+@bot.callback_query_handler(func=lambda call: call.data == 'D')
+def deposit_init(call):
+    msg = bot.send_message(call.message.chat.id, "💰 Kitna amount deposit karna hai?")
+    bot.register_next_step_handler(msg, send_req_to_admin)
+
+# 1. User ka amount Admin ko bhejna
+def send_req_to_admin(message):
+    amt = message.text
+    user_id = message.from_user.id
+    user_name = message.from_user.first_name
     
-    # 1. Bet Section Main Menu
-    if call.data == 'BET_SECTION':
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("🏏 IPL/PSL Matches", callback_data='IPL_PSL'))
-        markup.add(types.InlineKeyboardButton("🎮 VIRTUAL ARENA (24/7)", callback_data='V_ARENA'))
-        markup.add(types.InlineKeyboardButton("⬅️ Back", callback_data='BACK_START'))
-        bot.edit_message_text("🎯 **Select Category:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode='Markdown')
+    # Admin ko msg jayega jisme ID chupi hogi
+    bot.send_message(ADMIN_ID, f"💵 **DEP REQ**\nUser: {user_name}\nID: `{user_id}`\nAmt: {amt}\n\nIspe reply karke **QR Photo** ya **UPI** bhejo.")
+    bot.send_message(message.chat.id, "✅ Request bhej di hai. Admin abhi aapko QR bhejega, wait karo.")
 
-    # 2. IPL/PSL Logic
-    elif call.data == 'IPL_PSL':
-        # Yahan schedule daal sakte ho, abhi static text hai
-        bot.send_message(call.message.chat.id, "🏏 **IPL/PSL TODAY**\n\nNo matches live right now. Next match at 7:30 PM IST.")
+# 2. Admin jab Reply kare (QR bhejne ke liye)
+@bot.message_handler(func=lambda m: m.from_user.id == ADMIN_ID and m.reply_to_message is not None)
+def admin_reply_logic(message):
+    try:
+        # Reply wale msg se User ID nikalna
+        orig_text = message.reply_to_message.text
+        target_id = int(orig_text.split("ID: ")[1].split("\n")[0])
 
-    # 3. Virtual Arena Logic
-    elif call.data == 'V_ARENA':
-        info = get_v_info()
-        # Automate URL detection
-        host = request.host_url.strip('/')
-        url = f"{host}?user_id={uid}"
-        
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("🏟️ ENTER ARENA", web_app=types.WebAppInfo(url)))
-        bot.send_message(call.message.chat.id, f"🎮 **VIRTUAL MATCH**\n\n⚔️ {info['t1']} vs {info['t2']}\n🕒 Time: {info['time']}\n\nNiche button se Arena mein ghuso 👇", reply_markup=markup, parse_mode='Markdown')
+        # Agar admin +100 likhe toh balance update
+        if message.text and (message.text.startswith('+') or message.text.startswith('-')):
+            amt = int(message.text)
+            update_balance(target_id, amt)
+            bot.send_message(target_id, f"✅ Wallet Updated! New Balance add ho gaya hai.")
+            bot.reply_to(message, "Balance Update Ho gaya!")
+            return
 
-    # 4. Balance check
-    elif call.data == 'AB':
-        bal = get_balance(uid)
-        bot.answer_callback_query(call.id, f"💰 Tera Balance: ₹{bal}", show_alert=True)
-    
-    # 5. Back to Start
-    elif call.data == 'BACK_START':
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        markup.add(types.InlineKeyboardButton("💰 Deposit", callback_data='D'),
-                   types.InlineKeyboardButton("🏦 Withdraw", callback_data='W'),
-                   types.InlineKeyboardButton("💳 Balance", callback_data='AB'),
-                   types.InlineKeyboardButton("🎲 Bet Section", callback_data='BET_SECTION'))
-        bot.edit_message_text("🏆 *Chuza090 MULTI-LEAGUE BOOK*", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode='Markdown')
+        # Agar admin Photo ya UPI bhej raha hai toh user ko forward karna
+        if message.content_type == 'photo':
+            bot.send_photo(target_id, message.photo[-1].file_id, caption="Ye raha QR. Pay karke SS isi message par reply karein.")
+        else:
+            bot.send_message(target_id, f"Admin Message: {message.text}\n\nIspar reply karke SS bhejein.")
+            
+        bot.reply_to(message, "Message User ko bhej diya gaya hai. ✅")
+    except Exception as e:
+        bot.reply_to(message, f"Error: {e}")
 
-    # 6. Deposit/Withdraw Placeholders
-    elif call.data == 'D':
-        bot.send_message(call.message.chat.id, "💰 **Deposit System**\nMin: ₹100\nPayment karke screenshot yahan bhejein.")
-    elif call.data == 'W':
-        bot.send_message(call.message.chat.id, "🏦 **Withdrawal**\nAmount aur UPI ID bhejein (Min: ₹100)")
+# 3. User jab QR wale message par SS reply kare
+@bot.message_handler(content_types=['photo', 'text'])
+def user_replies(message):
+    # Agar ye normal message hai aur admin ko reply jaana chahiye
+    if message.from_user.id != ADMIN_ID:
+        bot.forward_message(ADMIN_ID, message.chat.id, message.message_id)
+        bot.send_message(ADMIN_ID, f"📩 **USER RESPONSE**\nID: `{message.from_user.id}`\nUpar wala message check karo.")
 
-# --- FLASK ROUTES ---
+# --- FLASK ---
 @app.route('/')
-def index(): return render_template('index.html')
-
-@app.route('/get_user_data')
-def get_user_data():
-    uid = request.args.get('user_id')
-    return jsonify({"balance": get_balance(int(uid)) if uid else 0})
-
-@app.route('/place_virtual_bet', methods=['POST'])
-def v_bet():
-    data = request.json
-    uid, amt = int(data['user_id']), int(data['amount'])
-    if get_balance(uid) >= amt:
-        update_balance(uid, "User", -amt)
-        return jsonify({"status": "success", "new_balance": get_balance(uid)})
-    return jsonify({"status": "error", "message": "Low Balance!"})
-
-# --- RUNNER ---
-def run_bot():
-    bot.remove_webhook()
-    bot.infinity_polling()
+def index(): return "Bot is Running"
 
 if __name__ == '__main__':
     init_db()
-    threading.Thread(target=run_bot).start()
+    threading.Thread(target=lambda: bot.infinity_polling()).start()
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
