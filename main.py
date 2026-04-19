@@ -6,7 +6,7 @@ from telebot import TeleBot, types
 import database
 
 app = Flask(__name__)
-bot = TeleBot("8735091687:AAHn5Grvzg0Lf2R799xwPtRRnzgA8O8WE4w") 
+bot = TeleBot("8735091687:AAH9JRYZctl-E6L_Y28fSTedwAHnvH9N0Us") 
 ADMIN_ID = 7978295530 # <--- Apni ID
 CHANNEL_ID = -1003869160392 # <--- Apni Channel ID yahan daal (Without quotes agar number hai)
 
@@ -86,6 +86,20 @@ def vbet():
 def run_f(): app.run(host='0.0.0.0', port=5000)
 
 if __name__ == '__main__':
-    start_virtual_cycle()
-    threading.Thread(target=run_f).start()
-    bot.infinity_polling()
+    setup_virtual_match()
+    
+    import threading
+    # Bot ko start karne ka function
+    def start_bot():
+        print("Starting Bot Polling...")
+        bot.remove_webhook() # Purane fanse hue connections clear karega
+        bot.infinity_polling(timeout=20, long_polling_timeout=10)
+
+    # Threading setup
+    thread = threading.Thread(target=start_bot)
+    thread.daemon = True
+    thread.start()
+
+    # Render ka port handle karne ke liye
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
