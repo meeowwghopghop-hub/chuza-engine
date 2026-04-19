@@ -12,8 +12,8 @@ bot = TeleBot(TOKEN)
 app = Flask(__name__)
 
 # --- SETTINGS (Inhe Update Karlo) ---
-ADMIN_ID = 123456789  # <--- Apni Telegram Numeric ID daal
-CHANNEL_ID = -100...  # <--- Apni Channel ID daal (-100 se shuru hone wali)
+ADMIN_ID = 7978295530  # <--- Apni Telegram Numeric ID daal
+CHANNEL_ID = -1003869160392  # <--- Apni Channel ID daal (-100 se shuru hone wali)
 
 # Database Initialize
 database.init_db()
